@@ -50,6 +50,9 @@ public:
 	virtual PingResult ping(const QString& hostAddress) = 0;
 	virtual bool configureFirewallException( const QString& applicationPath, const QString& description, bool enabled ) = 0;
 
+	virtual bool setInternetAccessBlocked(bool blocked) = 0;
+	virtual bool isInternetAccessBlocked() const = 0;
+
 	virtual bool configureSocketKeepalive( Socket socket, bool enabled, int idleTime, int interval, int probes ) = 0;
 
 	virtual QNetworkInterface defaultRouteNetworkInterface() = 0;

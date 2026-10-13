@@ -38,6 +38,9 @@ public:
 	PingResult ping(const QString& hostAddress) override;
 	bool configureFirewallException( const QString& applicationPath, const QString& description, bool enabled ) override;
 
+	bool setInternetAccessBlocked(bool blocked) override;
+	bool isInternetAccessBlocked() const override;
+
 	bool configureSocketKeepalive( Socket socket, bool enabled, int idleTime, int interval, int probes ) override;
 
 	QNetworkInterface defaultRouteNetworkInterface() override;
@@ -46,6 +49,8 @@ public:
 	static constexpr auto WindowsFirewallServiceError = HRESULT(0x800706D9);
 
 private:
+	HANDLE m_internetAccessFilterEngine{nullptr};
+
 	bool pingIPv4Address(const QString& hostAddress, PingResult* result);
 	bool pingIPv6Address(const QString& hostAddress, PingResult* result);
 	bool pingViaUtility(const QString& hostAddress, PingResult* result);

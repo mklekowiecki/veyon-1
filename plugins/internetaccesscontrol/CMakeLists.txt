@@ -1,0 +1,6 @@
+include(BuildVeyonPlugin)
+
+build_veyon_plugin(internetaccesscontrol
+	NAME InternetAccessControl
+	SOURCES
+	InternetAccessControlFeaturePlugin.cpp InternetAccessControlFeaturePlugin.h internetaccesscontrol.qrc)

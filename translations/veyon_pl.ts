@@ -2275,6 +2275,45 @@ Make sure that the names of the keys belonging to each other are identical on al
     </message>
 </context>
 <context>
+    <name>InternetAccessControlFeaturePlugin</name>
+    <message>
+        <source>Block internet</source>
+        <translation>Zablokuj internet</translation>
+    </message>
+    <message>
+        <source>Click this button to block internet access on all computers. The local network remains accessible.</source>
+        <translation>Kliknij ten przycisk, aby zablokować dostęp do internetu na wszystkich komputerach. Sieć lokalna pozostaje dostępna.</translation>
+    </message>
+    <message>
+        <source>Unblock internet</source>
+        <translation>Odblokuj internet</translation>
+    </message>
+    <message>
+        <source>Click this button to restore internet access on all computers.</source>
+        <translation>Kliknij ten przycisk, aby przywrócić dostęp do internetu na wszystkich komputerach.</translation>
+    </message>
+    <message>
+        <source>Block and unblock internet access of a computer</source>
+        <translation>Blokowanie i odblokowywanie dostępu komputera do internetu</translation>
+    </message>
+    <message>
+        <source>Internet access could not be blocked on the following computers:
+%1</source>
+        <translation>Nie udało się zablokować dostępu do internetu na następujących komputerach:
+%1</translation>
+    </message>
+    <message>
+        <source>Internet access could not be restored on the following computers:
+%1</source>
+        <translation>Nie udało się przywrócić dostępu do internetu na następujących komputerach:
+%1</translation>
+    </message>
+    <message>
+        <source>Internet access control</source>
+        <translation>Kontrola dostępu do internetu</translation>
+    </message>
+</context>
+<context>
     <name>LdapBrowseDialog</name>
     <message>
         <source>Browse LDAP</source>
