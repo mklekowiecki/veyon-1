@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/internetaccesscontrol" >
+        <file>internet-access-blocked.png</file>
+        <file>internet-access-unblocked.png</file>
+    </qresource>
+</RCC>

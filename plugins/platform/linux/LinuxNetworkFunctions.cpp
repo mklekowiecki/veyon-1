@@ -64,6 +64,24 @@ bool LinuxNetworkFunctions::configureFirewallException( const QString& applicati
 
 
 
+bool LinuxNetworkFunctions::setInternetAccessBlocked(bool blocked)
+{
+	Q_UNUSED(blocked)
+
+	vWarning() << "blocking internet access is not supported on this platform";
+
+	return false;
+}
+
+
+
+bool LinuxNetworkFunctions::isInternetAccessBlocked() const
+{
+	return false;
+}
+
+
+
 bool LinuxNetworkFunctions::configureSocketKeepalive( Socket socket, bool enabled, int idleTime, int interval, int probes )
 {
 	int optval;

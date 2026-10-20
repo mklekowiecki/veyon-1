@@ -32,9 +32,13 @@
 #include <icmpapi.h>
 #include <ws2ipdef.h>
 #include <ws2tcpip.h>
+#include <fwpmu.h>
+
+#include <array>
 
 #include <QHostAddress>
 #include <QProcess>
+#include <QUuid>
 
 #include "HostAddress.h"
 #include "WindowsCoreFunctions.h"
@@ -298,6 +302,175 @@ bool WindowsNetworkFunctions::configureFirewallException( const QString& applica
 	}
 
 	return result;
+}
+
+
+
+// the MinGW-w64 headers lack the definitions of WFP layers, conditions and session flags
+static constexpr GUID WfpLayerAleAuthConnectV4{0xc38d57d1, 0x05a7, 0x4c33, {0x90, 0x4f, 0x7f, 0xbc, 0xee, 0xe6, 0x0e, 0x82}};
+static constexpr GUID WfpLayerAleAuthConnectV6{0x4a72393b, 0x319f, 0x44bc, {0x84, 0xc3, 0xba, 0x54, 0xdc, 0xb3, 0xb6, 0xb4}};
+static constexpr GUID WfpConditionIpRemoteAddress{0xb235ae9a, 0x1d64, 0x49b8, {0xa4, 0x4c, 0x5f, 0xf3, 0xd9, 0x09, 0x50, 0x45}};
+static constexpr UINT32 WfpSessionFlagDynamic = 0x00000001;
+
+
+
+static DWORD addInternetAccessFilter(HANDLE engine, const GUID& subLayerKey, const GUID& layerKey,
+									 FWP_ACTION_TYPE action, UINT8 weight,
+									 FWPM_FILTER_CONDITION0* conditions, UINT32 conditionCount)
+{
+	FWPM_FILTER0 filter{};
+	filter.displayData.name = const_cast<wchar_t *>(L"Veyon internet access control");
+	filter.layerKey = layerKey;
+	filter.subLayerKey = subLayerKey;
+	filter.weight.type = FWP_UINT8;
+	filter.weight.uint8 = weight;
+	filter.action.type = action;
+	filter.numFilterConditions = conditionCount;
+	filter.filterCondition = conditions;
+
+	return FwpmFilterAdd0(engine, &filter, nullptr, nullptr);
+}
+
+
+
+static DWORD addInternetAccessFilters(HANDLE engine)
+{
+	static constexpr UINT8 BlockWeight = 1;
+	static constexpr UINT8 PermitWeight = 2;
+
+	// loopback, private, link-local, multicast and broadcast addresses remain reachable
+	std::array<FWP_V4_ADDR_AND_MASK, 7> localNetworksV4{{
+		{0x7F000000, 0xFF000000}, // 127.0.0.0/8
+		{0x0A000000, 0xFF000000}, // 10.0.0.0/8
+		{0xAC100000, 0xFFF00000}, // 172.16.0.0/12
+		{0xC0A80000, 0xFFFF0000}, // 192.168.0.0/16
+		{0xA9FE0000, 0xFFFF0000}, // 169.254.0.0/16
+		{0xE0000000, 0xF0000000}, // 224.0.0.0/4
+		{0xFFFFFFFF, 0xFFFFFFFF}  // 255.255.255.255/32
+	}};
+
+	std::array<FWP_V6_ADDR_AND_MASK, 4> localNetworksV6{{
+		{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, 128}, // ::1/128
+		{{0xFE, 0x80}, 10}, // fe80::/10
+		{{0xFC}, 7}, // fc00::/7
+		{{0xFF}, 8} // ff00::/8
+	}};
+
+	// multiple conditions for the same field are combined using a logical OR
+	std::array<FWPM_FILTER_CONDITION0, localNetworksV4.size()> conditionsV4{};
+	for (size_t i = 0; i < localNetworksV4.size(); ++i)
+	{
+		conditionsV4[i].fieldKey = WfpConditionIpRemoteAddress;
+		conditionsV4[i].matchType = FWP_MATCH_EQUAL;
+		conditionsV4[i].conditionValue.type = FWP_V4_ADDR_MASK;
+		conditionsV4[i].conditionValue.v4AddrMask = &localNetworksV4[i];
+	}
+
+	std::array<FWPM_FILTER_CONDITION0, localNetworksV6.size()> conditionsV6{};
+	for (size_t i = 0; i < localNetworksV6.size(); ++i)
+	{
+		conditionsV6[i].fieldKey = WfpConditionIpRemoteAddress;
+		conditionsV6[i].matchType = FWP_MATCH_EQUAL;
+		conditionsV6[i].conditionValue.type = FWP_V6_ADDR_MASK;
+		conditionsV6[i].conditionValue.v6AddrMask = &localNetworksV6[i];
+	}
+
+	// use a random key so that servers of multiple sessions do not conflict
+	FWPM_SUBLAYER0 subLayer{};
+	subLayer.subLayerKey = QUuid::createUuid();
+	subLayer.displayData.name = const_cast<wchar_t *>(L"Veyon internet access control");
+	subLayer.weight = 0xFFFF;
+
+	auto error = FwpmSubLayerAdd0(engine, &subLayer, nullptr);
+	if (error != ERROR_SUCCESS)
+	{
+		return error;
+	}
+
+	error = addInternetAccessFilter(engine, subLayer.subLayerKey, WfpLayerAleAuthConnectV4,
+									FWP_ACTION_BLOCK, BlockWeight, nullptr, 0);
+	if (error != ERROR_SUCCESS)
+	{
+		return error;
+	}
+
+	error = addInternetAccessFilter(engine, subLayer.subLayerKey, WfpLayerAleAuthConnectV4,
+									FWP_ACTION_PERMIT, PermitWeight, conditionsV4.data(), conditionsV4.size());
+	if (error != ERROR_SUCCESS)
+	{
+		return error;
+	}
+
+	error = addInternetAccessFilter(engine, subLayer.subLayerKey, WfpLayerAleAuthConnectV6,
+									FWP_ACTION_BLOCK, BlockWeight, nullptr, 0);
+	if (error != ERROR_SUCCESS)
+	{
+		return error;
+	}
+
+	return addInternetAccessFilter(engine, subLayer.subLayerKey, WfpLayerAleAuthConnectV6,
+								   FWP_ACTION_PERMIT, PermitWeight, conditionsV6.data(), conditionsV6.size());
+}
+
+
+
+bool WindowsNetworkFunctions::setInternetAccessBlocked(bool blocked)
+{
+	if (blocked == isInternetAccessBlocked())
+	{
+		return true;
+	}
+
+	if (blocked == false)
+	{
+		// all filters belong to a dynamic session and are removed along with it
+		FwpmEngineClose0(m_internetAccessFilterEngine);
+		m_internetAccessFilterEngine = nullptr;
+		return true;
+	}
+
+	// use a dynamic session so that internet access is restored automatically
+	// whenever the process exits or crashes
+	FWPM_SESSION0 session{};
+	session.displayData.name = const_cast<wchar_t *>(L"Veyon internet access control");
+	session.flags = WfpSessionFlagDynamic;
+
+	HANDLE engine = nullptr;
+	auto error = FwpmEngineOpen0(nullptr, RPC_C_AUTHN_WINNT, nullptr, &session, &engine);
+	if (error != ERROR_SUCCESS)
+	{
+		vCritical() << "FwpmEngineOpen0() returned" << error;
+		return false;
+	}
+
+	error = FwpmTransactionBegin0(engine, 0);
+	if (error == ERROR_SUCCESS)
+	{
+		error = addInternetAccessFilters(engine);
+	}
+	if (error == ERROR_SUCCESS)
+	{
+		error = FwpmTransactionCommit0(engine);
+	}
+
+	if (error != ERROR_SUCCESS)
+	{
+		vCritical() << "failed to add filters for blocking internet access:" << error;
+		// closing the session aborts the pending transaction
+		FwpmEngineClose0(engine);
+		return false;
+	}
+
+	m_internetAccessFilterEngine = engine;
+
+	return true;
+}
+
+
+
+bool WindowsNetworkFunctions::isInternetAccessBlocked() const
+{
+	return m_internetAccessFilterEngine != nullptr;
 }
 
 
